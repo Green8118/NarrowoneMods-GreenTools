@@ -456,4 +456,5 @@ Green Tools - Script Manager for Narrow One
         createKeyOverlay();
         initPasswordSystem();
     }
+
 })();
