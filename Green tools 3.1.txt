@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Green Tools - Script Manager
+// @name         N1Green Tools - Script Manager
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.3
 // @description  Green Tools: Script Manager with Speed & Jump Boost for Narrow One
 // @author       Green Tools
 // @match        https://narrow.one/*
@@ -28,7 +28,9 @@
     const validPassword = getPassword();
     let isSpeedBoostActive = false;
     let isJumpBoostActive = false;
+    let isESPActive = false;
     let savedScripts = GM_getValue('savedScripts', {});
+    
     function getRandomColor() {
         const colors = [
             'rgba(255, 99, 132, 0.9)', 'rgba(54, 162, 235, 0.9)', 'rgba(255, 206, 86, 0.9)',
@@ -38,6 +40,7 @@
         ];
         return colors[Math.floor(Math.random() * colors.length)];
     }
+    
     function createKeyOverlay() {
         const overlay = document.createElement('div');
         overlay.id = 'keyOverlay';
@@ -73,6 +76,7 @@
             }
         });
     }
+    
     function verifyPassword() {
         const userInput = document.getElementById('keyInput').value;
         if (userInput === validPassword) {
@@ -127,6 +131,12 @@
                             <div style="position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; background: white; border-radius: 50%; transition: left 0.3s;"></div>
                         </button>
                     </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span>Player ESP</span>
+                        <button id="espToggle" style="background: #ff4444; border: none; border-radius: 15px; width: 50px; height: 25px; position: relative; cursor: pointer;">
+                            <div style="position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; background: white; border-radius: 50%; transition: left 0.3s;"></div>
+                        </button>
+                    </div>
                 </div>
 
                 <div style="margin-bottom: 15px;">
@@ -153,6 +163,7 @@
 
         document.getElementById('speedToggle').addEventListener('click', toggleSpeedBoost);
         document.getElementById('jumpToggle').addEventListener('click', toggleJumpBoost);
+        document.getElementById('espToggle').addEventListener('click', toggleESP);
         document.getElementById('runScript').addEventListener('click', runCustomScript);
         document.getElementById('saveScript').addEventListener('click', saveCustomScript);
         document.getElementById('minimizeBtn').addEventListener('click', toggleMinimize);
@@ -207,6 +218,7 @@
             el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
         }
     }
+    
     function toggleSpeedBoost() {
         const toggle = document.getElementById('speedToggle');
         const toggleCircle = toggle.querySelector('div');
@@ -225,6 +237,7 @@
             showNotification('Speed Boost Deactivated');
         }
     }
+    
     function applySpeedBoost() {
         const targetWalkSpeed = 115;
 
@@ -250,10 +263,12 @@
             configurable: true
         });
     }
+    
     function removeSpeedBoost() {
         delete Object.prototype.walkSpeed;
         delete Object.prototype.flagWalkSpeed;
     }
+    
     function toggleJumpBoost() {
         const toggle = document.getElementById('jumpToggle');
         const toggleCircle = toggle.querySelector('div');
@@ -272,6 +287,7 @@
             showNotification('Jump Boost Deactivated');
         }
     }
+    
     function applyJumpBoost() {
         const targetJumpForce = 20;
 
@@ -287,12 +303,105 @@
         });
     }
 
-    // Remove jump boost
     function removeJumpBoost() {
         delete Object.prototype.jumpForce;
     }
+    function toggleESP() {
+        const toggle = document.getElementById('espToggle');
+        const toggleCircle = toggle.querySelector('div');
 
-    // Run custom script
+        if (!isESPActive) {
+            toggle.style.background = '#44ff44';
+            toggleCircle.style.left = '27px';
+            applyESP();
+            isESPActive = true;
+            showNotification('Player ESP Activated');
+        } else {
+            toggle.style.background = '#ff4444';
+            toggleCircle.style.left = '2px';
+            removeESP();
+            isESPActive = false;
+            showNotification('Player ESP Deactivated');
+        }
+    }
+
+    function applyESP() {
+        if (!window.originalNameProperty) {
+            window.originalNameProperty = Object.getOwnPropertyDescriptor(Object.prototype, 'name');
+        }
+        Object.defineProperty(Object.prototype, 'name', {
+            get() {
+                return this._name;
+            },
+            set(v) {
+                this._name = v;
+                if (v === 'player') {
+                    removeDepthTest(this.material);
+                }
+            },
+            configurable: true
+        });
+        try {
+            const objects = Object.values(window).filter(obj => obj && typeof obj === 'object');
+            objects.forEach(obj => {
+                if (obj.name === 'player') {
+                    removeDepthTest(obj.material);
+                }
+            });
+        } catch (e) {
+            console.log('ESP: Re-triggering player objects');
+        }
+    }
+
+    function removeESP() {
+        if (window.originalNameProperty) {
+            Object.defineProperty(Object.prototype, 'name', window.originalNameProperty);
+            delete window.originalNameProperty;
+        } else {
+            delete Object.prototype.name;
+        }
+        try {
+            const objects = Object.values(window).filter(obj => obj && typeof obj === 'object');
+            objects.forEach(obj => {
+                if (obj.material) {
+                    restoreDepthTest(obj.material);
+                }
+            });
+        } catch (e) {
+            console.log('ESP: Restoring depth test');
+        }
+    }
+
+    function removeDepthTest(material) {
+        if (!material) return;
+        if (Array.isArray(material)) {
+            material.forEach(mat => {
+                if (mat && typeof mat === 'object') {
+                    mat.depthTest = false;
+                    mat._depthTestModified = true;
+                }
+            });
+        } else if (typeof material === 'object') {
+            material.depthTest = false;
+            material._depthTestModified = true;
+        }
+    }
+
+    function restoreDepthTest(material) {
+        if (!material) return;
+        if (Array.isArray(material)) {
+            material.forEach(mat => {
+                if (mat && mat._depthTestModified) {
+                    mat.depthTest = true;
+                    delete mat._depthTestModified;
+                }
+            });
+        } else if (material._depthTestModified) {
+            material.depthTest = true;
+            delete material._depthTestModified;
+        }
+    }
+
     function runCustomScript() {
         const scriptCode = document.getElementById('scriptInput').value;
         if (scriptCode.trim()) {
@@ -306,6 +415,7 @@
             showNotification('Please enter a script', true);
         }
     }
+    
     function saveCustomScript() {
         const scriptCode = document.getElementById('scriptInput').value;
         const scriptName = document.getElementById('scriptName').value;
@@ -320,6 +430,7 @@
             showNotification('Please enter both script and name', true);
         }
     }
+    
     function loadSavedScripts() {
         const savedScriptsList = document.getElementById('savedScriptsList');
         savedScriptsList.innerHTML = '';
@@ -344,6 +455,7 @@
 
             savedScriptsList.appendChild(scriptItem);
         }
+        
         document.querySelectorAll('.run-saved-script').forEach(button => {
             button.addEventListener('click', function() {
                 const scriptName = this.getAttribute('data-name');
@@ -366,6 +478,7 @@
             });
         });
     }
+    
     function toggleMinimize() {
         const content = document.getElementById('windowContent');
         if (content.style.display === 'none') {
@@ -374,6 +487,7 @@
             content.style.display = 'none';
         }
     }
+    
     function closeWindow() {
         document.getElementById('greenToolsWindow').style.display = 'none';
         showNotification('Green Tools minimized to system tray');
@@ -404,6 +518,7 @@
 
         document.body.appendChild(reopenBtn);
     }
+    
     function showNotification(message, isError = false) {
         const notification = document.createElement('div');
         notification.textContent = message;
@@ -427,7 +542,6 @@
         }, 3000);
     }
 
-    // Initialize
     console.log(`
   ____                                  _____                   _
  / ___|  _ __    ___    ___   _ __     |_   _|   ___     ___   | |  ___
@@ -437,6 +551,7 @@
 
 Green Tools - Script Manager for Narrow One
     `);
+    
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
@@ -456,5 +571,4 @@ Green Tools - Script Manager for Narrow One
         createKeyOverlay();
         initPasswordSystem();
     }
-
 })();
